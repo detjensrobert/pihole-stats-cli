@@ -1,10 +1,15 @@
 console.log("Pi-Hole ip graph, detjensrobert 2019");
 
-const http = require('http');
+const request = require('request-promise-native');
+
+const { setIntervalAsync } = require('set-interval-async/legacy');
 
 // ansi module for colored text, etc
 const ansi = require('ansi');
 const cursor = ansi(process.stdout);
+
+
+const updateInterval = 1000 * 60 * 10;
 
 
 /* To keep track of non-active clients that dont show up in the latest topClients
@@ -12,67 +17,50 @@ const cursor = ansi(process.stdout);
  * 
  * a Map is used since we already know what IP we need the old data for.
  */
-var oldTopQs = new Map(Array(
-  [ '001', 356 ],
-  [ '065', 16 ],
-  [ '067', 19 ],
-  [ '073', 112 ],
-  [ '100', 1359 ],
-  [ '102', 2300 ],
-  [ '208', 788 ],
-  [ '216', 1631 ],
-  [ '232', 1335 ]
-));
+var oldTopQs = new Map();
+
+//~ cursor.red().write("░░ ▒▒ ▓▓ ██  ").yellow().write("░░ ▒▒ ▓▓ ██\n");
+//~ cursor.blue().write("░░ ▒▒ ▓▓ ██  ").cyan().write("░░ ▒▒ ▓▓ ██\n");
 
 
 main();
 
-function main () {
+async function main () {
 	
-	getNewStats();
-	setInterval(getNewStats, 1000 * 60 * 10);
+	//run once and dont print to update old top data
+	await runner(true);
+	
+	//now run every $interval mins
+	await runner();
+	setIntervalAsync( async () => {await runner();} , updateInterval);
+	
 	
 }
 
+async function runner (noPrint) {
+	let dataPromise = getDataPromise();
+	let data = await dataPromise;
+	let deltas = getDeltas(data);
+	if (!noPrint) {printGraph(deltas);}
+}
 
 
-// Returns JSON object of ips and their latest query totals 
-function getNewStats () {
-	http.get("http://pi.hole/admin/api.php?topClients=100", (res) => {
-		const { statusCode } = res;
-		const contentType = res.headers['content-type'];
-
-		let error;
-		if (statusCode !== 200) {
-			error = new Error('Request Failed.\n' + `Status Code: ${statusCode}`);
-		} else if (!/^application\/json/.test(contentType)) {
-			error = new Error('Invalid content-type.\n' + `Expected application/json but received ${contentType}`);
-		}
-		if (error) {
-			console.error(error.message);
-			// Consume response data to free up memory
-			res.resume();
-			return;
-		}
-		res.setEncoding('utf8');
-		let rawData = '';
-		res.on('data', (chunk) => { rawData += chunk; });
-		res.on('end', () => {
+//return Promise that becomes JSON object of IPs
+function getDataPromise () {
+	return new Promise( (resolve, reject) => {
+		
+		request( {uri: 'http://pi.hole/admin/api.php?topClients=100', json: true} )
+		.then(function (response) {
 			
-			try {
-				const parsedData = JSON.parse(rawData);
-				
-				// return back the parsed data
-				getDeltas(parsedData.top_sources);
-				
-				
-			} catch (e) {
-				console.error(e.message);
-			}
+			// on get
+			resolve(response.top_sources);
+			
+		})
+		.catch(function (err) {
+			// API call failed...
+			reject(err);
 		});
 		
-	}).on('error', (e) => {
-		console.error(`Got error: ${e.message}`);
 	});
 }
 
@@ -110,7 +98,7 @@ function getDeltas (newTopQs) {
 	});
 	
 	//~ console.log(deltas);
-	printGraph(deltas);
+	return deltas;
 }
 
 /* Given the recent activity for each ip (array: [ [ip, queries]... ] ),
@@ -119,77 +107,86 @@ function getDeltas (newTopQs) {
 function printGraph (activityUnsorted) {
 	
 	/* graph looks something like this:
-	 *  | 13:20 █████░░░░░░░▒▒▒▒▒▓▓▓▓▓▓▓▓▓       |
-	 *  | 13:30 ████████░░░░░░▒▒▒▒▒▒▒▓▓▓         |
-	 *  | ██ .052   ░░ .100   ▒▒ .102   ▓▓ .216  |
+	 *  | 01:20p █████░░░░░░░▒▒▒▒▒▓▓▓▓▓▓▓▓▓       |
+	 *  | 01:30p ████████░░░░░░▒▒▒▒▒▒▒▓▓▓         |
+	 *  | ██ .052   ░░ .100   ▒▒ .102   ▓▓ .216   |
 	 */
 	
-	
-
-	const time = new Date();
-	let timeStr = ("" + time.getHours()).padStart(2, "0") + ":" 
-				+ ("" + time.getMinutes()).padStart(2, "0");
+	let timeStr = timeAMPM(new Date());
 	
 	const graphWidth = process.stdout.columns - timeStr.length - 3; // -3 for spaces
 	const queryWidth = 500; // enough for 10 mins, probably
 	
 	const charsPerQuery = graphWidth / queryWidth;
 	
+	let legend = "";
 		
 	//sort by ip
 	let activity = Array.from(activityUnsorted).sort((a, b) => {
 		// a[0], b[0] is the key of the map
 		return a[0] - b[0];
 	});
-	
-	//~ console.log("window is " + graphWidth + " chars wide");
-	//~ console.log("time is " + timeStr);
-	//~ console.log("chars per query " + charsPerQuery);
-	
+		
 	cursor.horizontalAbsolute(0).eraseLine();
 	cursor.reset().write(" " + timeStr + " ");
 	
-	let chars = ["█", "▓", "▒"];
-	let shade = 0; // 0-2, light to dark, will wrap
-	let color = 0; // 0-2, white blue red, based on ip
-		
+	
 	for (let i = 0; i < activity.length; i++) {
-		let data = activity[i];
+		let data = activity[i]; // pull ip and amount out of big array
 		
-		if (data[0].charAt(0) != color) {
-			color = data[0].charAt(0);
-			shade = 0;
-		}
-				
-		// set color
-		switch (color) {
-			case "0":
-				cursor.white();
-				break;
-			case "1":
-				cursor.blue();
-				break;
-			case "2":
-				cursor.red();
-				break;
-			default:
-				cursor.reset();
-				break;
-		}
-		
+		let char = setColor(data[0]); // get shade and set color by ip
+
 		let charsToPrint = Math.ceil(data[1] * charsPerQuery);
 		
-		//~ console.log("printing", charsToPrint, "chars in color shade", color, shade);
-		
-		for (let j = 0; j < charsToPrint; j++) {
-			cursor.write(chars[shade]);
+		for (let j = 0; j < charsToPrint; j++) { // print 'em
+			cursor.write(char);
 		}
 		
-		// increment shade
-		shade++;
-		if (shade > 2) {shade = 0;}
-		
+		legend += "  " + char + char + " " + data[0] + " "
 	}
 	
-	cursor.reset().write("\n" + activity);
+	cursor.reset().write("\n" + legend);
 }
+
+function timeAMPM (date) {
+	let hours = date.getHours();
+	let minutes = date.getMinutes();
+	let ampm = hours >= 12 ? 'p' : 'a';
+	hours = hours % 12;
+	hours = hours ? hours : 12; // the hour '0' should be '12'
+	minutes = minutes < 10 ? '0'+minutes : minutes;
+	let strTime = hours + ':' + minutes + ampm;
+	return strTime;
+}
+
+
+function setColor (ip) {
+	
+	let shades = "█▓▒░█▓▒░";
+	
+	let origin = Number(ip.charAt(0));
+	let device = Number(ip.slice(1));
+	
+	//~ console.log("device #: " + device);
+	
+	let charIdx = Math.floor(device/2) % 6;
+		
+	switch (origin) {
+		case 0:
+			cursor.white();
+			break;
+		case 1:
+			cursor.blue();
+			if (charIdx > 2) { cursor.cyan(); }
+			break;
+		case 2:
+			cursor.red();
+			if (charIdx > 2) { cursor.yellow(); }
+			break;
+		default:
+			cursor.reset();
+	}
+	
+	return shades.charAt(charIdx);
+}
+

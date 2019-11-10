@@ -1,0 +1,16 @@
+{
+	"name": "pihole-cli-stats",
+	"author": "detjensrobert",
+	"version": "0.6.9",
+	"main": "stats.js",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com.detjensrobert/pihole-stats-cli.git"
+	},
+	"dependencies": {
+		"ansi": "^0.3.1",
+		"request": "^2.88.0",
+		"request-promise-native": "^1.0.8",
+		"set-interval-async": "^1.0.29"
+	}
+}
