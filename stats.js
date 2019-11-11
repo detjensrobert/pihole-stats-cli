@@ -1,13 +1,11 @@
-console.log("Pi-Hole ip graph, detjensrobert 2019");
+oconsole.log("Pi-Hole ip graph, detjensrobert 2019");
 
+// Packages to get
 const request = require('request-promise-native');
-
 const { setIntervalAsync } = require('set-interval-async/legacy');
-
-// ansi module for colored text, etc
 const ansi = require('ansi');
-const cursor = ansi(process.stdout);
 
+const cursor = ansi(process.stdout);
 
 const updateInterval = 1000 * 60 * 10;
 
@@ -17,11 +15,8 @@ const updateInterval = 1000 * 60 * 10;
  * 
  * a Map is used since we already know what IP we need the old data for.
  */
+
 var oldTopQs = new Map();
-
-//~ cursor.red().write("░░ ▒▒ ▓▓ ██  ").yellow().write("░░ ▒▒ ▓▓ ██\n");
-//~ cursor.blue().write("░░ ▒▒ ▓▓ ██  ").cyan().write("░░ ▒▒ ▓▓ ██\n");
-
 
 main();
 
@@ -63,6 +58,9 @@ function getDataPromise () {
 		
 	});
 }
+
+
+
 
 
 /* Recent activity is calculated based on newTop - oldTop
@@ -159,9 +157,16 @@ function timeAMPM (date) {
 	let hours = date.getHours();
 	let minutes = date.getMinutes();
 	let ampm = hours >= 12 ? 'p' : 'a';
+	
+	//get hours in proper format
 	hours = hours % 12;
 	hours = hours ? hours : 12; // the hour '0' should be '12'
-	minutes = minutes < 10 ? '0'+minutes : minutes;
+	
+	//pad those
+	minutes = minutes < 10 ? '0' + minutes : minutes;
+	hours = hours < 10 ? '0' + hours : hours;
+	
+	//form time from components
 	let strTime = hours + ':' + minutes + ampm;
 	return strTime;
 }
