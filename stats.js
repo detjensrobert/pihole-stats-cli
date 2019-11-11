@@ -118,9 +118,7 @@ function printGraph (activityUnsorted) {
 	const queryWidth = 500; // enough for 10 mins, probably
 	
 	const charsPerQuery = graphWidth / queryWidth;
-	
-	let legend = "";
-		
+			
 	//sort by ip
 	let activity = Array.from(activityUnsorted).sort((a, b) => {
 		// a[0], b[0] is the key of the map
@@ -130,7 +128,7 @@ function printGraph (activityUnsorted) {
 	cursor.horizontalAbsolute(0).eraseLine();
 	cursor.reset().write(" " + timeStr + " ");
 	
-	
+	//print bar graph
 	for (let i = 0; i < activity.length; i++) {
 		let data = activity[i]; // pull ip and amount out of big array
 		
@@ -141,11 +139,20 @@ function printGraph (activityUnsorted) {
 		for (let j = 0; j < charsToPrint; j++) { // print 'em
 			cursor.write(char);
 		}
-		
-		legend += "  " + char + char + " " + data[0] + " "
 	}
 	
-	cursor.reset().write("\n" + legend);
+	
+	cursor.reset().write("\n");
+	//print legend
+	for (let i = 0; i < activity.length; i++) {
+		let data = activity[i]; // pull ip and amount out of big array
+		
+		let char = setColor(data[0]); // get shade and set color by ip
+				
+		cursor.write("  " + char + char + " ." + data[0] + " (" + data[1] + ") ");
+	}
+	cursor.reset();
+	
 }
 
 function timeAMPM (date) {
