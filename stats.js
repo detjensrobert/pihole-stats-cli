@@ -1,4 +1,4 @@
-oconsole.log("Pi-Hole ip graph, detjensrobert 2019");
+console.log("Pi-Hole ip graph, detjensrobert 2019");
 
 // Packages to get
 const request = require('request-promise-native');
@@ -17,6 +17,7 @@ const updateInterval = 1000 * 60 * 10;
  */
 
 var oldTopQs = new Map();
+var colorMap = new Map();
 
 main();
 
@@ -99,6 +100,56 @@ function getDeltas (newTopQs) {
 	return deltas;
 }
 
+function setColorMap (newTopQs) {
+	//~ console.log(newTopQs);
+		
+	// array of all ips (long form)
+	const ips = Object.keys(newTopQs);
+	
+	
+	ips.forEach( (elem) => {
+		//~ console.log(elem, newTopQs[elem]);
+		
+		//trim all ips in newTopQs except for last digits
+		let trimmedIP = elem.slice(elem.lastIndexOf(".")+1).padStart(3, "0");
+		//~ console.log(trimmedIP);
+		
+		// if this is a new ip (not seen before), old data is 0 queries
+		if (colorMap.has(trimmedIP)) {
+
+			let newColor = generateColorByIp(trimmedIP);
+			colorMap.set(trimmedIP, newColor);
+
+		}
+	});
+	return;
+}
+
+function generateColorByIP (ip){
+
+	if(ip[0] == '0'){
+
+		//colors from greys
+	}
+
+	else if (ip[0] == '1'){
+
+		//color from blues
+	}
+
+	else if (ip[0] == '2'){
+
+		//color from reds
+	}
+
+	else{
+
+		console.log("= ERR => FOUND A BAD IP: ");
+		console.log(ip);
+	}
+
+}
+
 /* Given the recent activity for each ip (array: [ [ip, queries]... ] ),
  * make & print bar graph, colored by ip
  */
@@ -130,7 +181,7 @@ function printGraph (activityUnsorted) {
 	for (let i = 0; i < activity.length; i++) {
 		let data = activity[i]; // pull ip and amount out of big array
 		
-		let char = setColor(data[0]); // get shade and set color by ip
+		let char = setColor(data[0], activity); // get shade and set color by ip
 
 		let charsToPrint = Math.ceil(data[1] * charsPerQuery);
 		
@@ -145,7 +196,7 @@ function printGraph (activityUnsorted) {
 	for (let i = 0; i < activity.length; i++) {
 		let data = activity[i]; // pull ip and amount out of big array
 		
-		let char = setColor(data[0]); // get shade and set color by ip
+		let char = setColor(data[0], activity); // get shade and set color by ip
 				
 		cursor.write("  " + char + char + " ." + data[0] + " (" + data[1] + ") ");
 	}
