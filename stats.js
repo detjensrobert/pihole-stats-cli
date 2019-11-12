@@ -219,7 +219,7 @@ function setColor (ip) {
 			if (!colors.has(ip)) {
 				colors.set(ip, availGreys.pop() || '#00ff00');
 			}
-			cursor.hex(greys.get(ip));
+			cursor.hex(colors.get(ip));
 			
 			break;
 		case 1:
