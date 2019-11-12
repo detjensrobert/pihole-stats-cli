@@ -7,7 +7,7 @@ const ansi = require('ansi');
 
 const cursor = ansi(process.stdout);
 
-const updateInterval = 1000 * 60 * 1;
+const updateInterval = 1000 * 60 * 10;
 
 /* To keep track of non-active clients that dont show up in the latest topClients
  * the last known number of queries for each IP needs to be stored
