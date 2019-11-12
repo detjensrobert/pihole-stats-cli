@@ -9,17 +9,28 @@ const cursor = ansi(process.stdout);
 
 const updateInterval = 1000 * 60 * 10;
 
-
 /* To keep track of non-active clients that dont show up in the latest topClients
  * the last known number of queries for each IP needs to be stored
  * 
  * a Map is used since we already know what IP we need the old data for.
  */
 
-var oldTopQs = new Map();
-var colorMap = new Map();
+var oldTops = new Map();
+
+//colors to print the ip ranges in
+var availReds = ['#FFff00', '#FFcc00', '#FF9900', '#FF6600', '#ff3300', '#ff0000'];
+var availBlues = ['#00ffFF', '#00ccff', '#0099FF', '#0066ff', '#0033ff'];
+var availGreys = ['#FFFFFF', '#dadada', '#9e9e9e', '#606060', '#444444'];
+
+// maps to store ip->color associations
+var reds = new Map();
+var blues = new Map();
+var greys = new Map();
+
+
 
 main();
+
 
 async function main () {
 	
@@ -28,8 +39,7 @@ async function main () {
 	
 	//now run every $interval mins
 	await runner();
-	setIntervalAsync( async () => {await runner();} , updateInterval);
-	
+	setIntervalAsync( async () => { await runner(); } , updateInterval);
 	
 }
 
@@ -68,30 +78,30 @@ function getDataPromise () {
  * where oldTop is the value from the map of old data
  */
 // Returns array of deltas, sorted by ip
-function getDeltas (newTopQs) {
-	//~ console.log(newTopQs);
+function getDeltas (newTops) {
+	//~ console.log(newTops);
 	let deltas = new Map();
 	
 	// array of all ips (long form)
-	const ips = Object.keys(newTopQs);
+	const ips = Object.keys(newTops);
 	
 	
 	ips.forEach( (elem) => {
-		//~ console.log(elem, newTopQs[elem]);
+		//~ console.log(elem, newTops[elem]);
 		
-		//trim all ips in newTopQs except for last digits
+		//trim all ips in newTops except for last digits
 		let trimmedIP = elem.slice(elem.lastIndexOf(".")+1).padStart(3, "0");
 		//~ console.log(trimmedIP);
 		
 		// if this is a new ip (not seen before), old data is 0 queries
-		let oldTotal = oldTopQs.has(trimmedIP) ? oldTopQs.get(trimmedIP) : 0;
+		let oldTotal = oldTops.has(trimmedIP) ? oldTops.get(trimmedIP) : 0;
 		
 		// if value changed
-		if (newTopQs[elem] > oldTotal) {
-			deltas.set(trimmedIP, newTopQs[elem] - oldTotal );
+		if (newTops[elem] > oldTotal) {
+			deltas.set(trimmedIP, newTops[elem] - oldTotal );
 		
 			// save new value for next time
-			oldTopQs.set(trimmedIP, newTopQs[elem])
+			oldTops.set(trimmedIP, newTops[elem])
 		}
 
 	});
@@ -100,55 +110,7 @@ function getDeltas (newTopQs) {
 	return deltas;
 }
 
-function setColorMap (newTopQs) {
-	//~ console.log(newTopQs);
-		
-	// array of all ips (long form)
-	const ips = Object.keys(newTopQs);
-	
-	
-	ips.forEach( (elem) => {
-		//~ console.log(elem, newTopQs[elem]);
-		
-		//trim all ips in newTopQs except for last digits
-		let trimmedIP = elem.slice(elem.lastIndexOf(".")+1).padStart(3, "0");
-		//~ console.log(trimmedIP);
-		
-		// if this is a new ip (not seen before), old data is 0 queries
-		if (colorMap.has(trimmedIP)) {
 
-			let newColor = generateColorByIp(trimmedIP);
-			colorMap.set(trimmedIP, newColor);
-
-		}
-	});
-	return;
-}
-
-function generateColorByIP (ip){
-
-	if(ip[0] == '0'){
-
-		//colors from greys
-	}
-
-	else if (ip[0] == '1'){
-
-		//color from blues
-	}
-
-	else if (ip[0] == '2'){
-
-		//color from reds
-	}
-
-	else{
-
-		console.log("= ERR => FOUND A BAD IP: ");
-		console.log(ip);
-	}
-
-}
 
 /* Given the recent activity for each ip (array: [ [ip, queries]... ] ),
  * make & print bar graph, colored by ip
@@ -163,7 +125,8 @@ function printGraph (activityUnsorted) {
 	
 	let timeStr = timeAMPM(new Date());
 	
-	const graphWidth = process.stdout.columns - timeStr.length - 3; // -3 for spaces
+	const termWidth = process.stdout.columns;
+	const graphWidth = termWidth - timeStr.length - 3; // -3 for spaces
 	const queryWidth = 500; // enough for 10 mins, probably
 	
 	const charsPerQuery = graphWidth / queryWidth;
@@ -180,13 +143,13 @@ function printGraph (activityUnsorted) {
 	//print bar graph
 	for (let i = 0; i < activity.length; i++) {
 		let data = activity[i]; // pull ip and amount out of big array
-		
-		let char = setColor(data[0], activity); // get shade and set color by ip
 
 		let charsToPrint = Math.ceil(data[1] * charsPerQuery);
 		
+		setColor(data[0]); // set color by ip
+		
 		for (let j = 0; j < charsToPrint; j++) { // print 'em
-			cursor.write(char);
+			cursor.write("█");
 		}
 	}
 	
@@ -196,9 +159,11 @@ function printGraph (activityUnsorted) {
 	for (let i = 0; i < activity.length; i++) {
 		let data = activity[i]; // pull ip and amount out of big array
 		
-		let char = setColor(data[0], activity); // get shade and set color by ip
+		setColor(data[0]); // set color by ip
 				
-		cursor.write("  " + char + char + " ." + data[0] + " (" + data[1] + ") ");
+		cursor.write("  ██ ." + data[0] + " (" + data[1] + ") ");
+		
+		//check if gonna need a new line
 	}
 	cursor.reset();
 	
@@ -213,43 +178,56 @@ function timeAMPM (date) {
 	hours = hours % 12;
 	hours = hours ? hours : 12; // the hour '0' should be '12'
 	
-	//pad those
-	minutes = minutes < 10 ? '0' + minutes : minutes;
-	hours = hours < 10 ? '0' + hours : hours;
+	// turn them into strings
+	hours = "" + hours;
+	minutes = "" + minutes;
+	
+	//pad out to 2 digits
+	hours.padStart(2, "0");
+	minutes.padStart(2, "0");
 	
 	//form time from components
-	let strTime = hours + ':' + minutes + ampm;
-	return strTime;
+	return hours + ':' + minutes + ampm;
 }
 
 
+
 function setColor (ip) {
-	
-	let shades = "█▓▒░█▓▒░";
 	
 	let origin = Number(ip.charAt(0));
 	let device = Number(ip.slice(1));
 	
 	//~ console.log("device #: " + device);
 	
-	let charIdx = Math.floor(device/2) % 6;
-		
 	switch (origin) {
 		case 0:
-			cursor.white();
+			
+			if (!greys.has(device)) {
+				greys.set(device, availGreys.pop() || '#00ff00');
+			}
+			cursor.hex(greys.get(device));
+			
 			break;
 		case 1:
-			cursor.blue();
-			if (charIdx > 2) { cursor.cyan(); }
+			
+			if (!blues.has(device)) {
+				blues.set(device, availBlues.pop() || '#00ff00');
+			}
+			cursor.hex(blues.get(device));
+			
 			break;
 		case 2:
-			cursor.red();
-			if (charIdx > 2) { cursor.yellow(); }
+			
+			if (!reds.has(device)) {
+				reds.set(device, availReds.pop() || '#00ff00');
+			}
+			cursor.hex(reds.get(device));
+			
 			break;
 		default:
 			cursor.reset();
+			console.log("ERR: Somehow you've got an invalid ip:", ip);
 	}
 	
-	return shades.charAt(charIdx);
 }
 
