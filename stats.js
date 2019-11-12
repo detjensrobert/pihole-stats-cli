@@ -7,7 +7,7 @@ const ansi = require('ansi');
 
 const cursor = ansi(process.stdout);
 
-const updateInterval = 1000 * 60 * 10;
+const updateInterval = 1000 * 60 * 1;
 
 /* To keep track of non-active clients that dont show up in the latest topClients
  * the last known number of queries for each IP needs to be stored
@@ -22,11 +22,10 @@ var availReds = ['#FFff00', '#FFcc00', '#FF9900', '#FF6600', '#ff3300', '#ff0000
 var availBlues = ['#00ffFF', '#00ccff', '#0099FF', '#0066ff', '#0033ff'];
 var availGreys = ['#FFFFFF', '#dadada', '#9e9e9e', '#606060', '#444444'];
 
-// maps to store ip->color associations
-var reds = new Map();
-var blues = new Map();
-var greys = new Map();
+// map to store ip->color associations
+var colors = new Map();
 
+var legendHeight = 0;
 
 
 main();
@@ -136,8 +135,13 @@ function printGraph (activityUnsorted) {
 		// a[0], b[0] is the key of the map
 		return a[0] - b[0];
 	});
-		
-	cursor.horizontalAbsolute(0).eraseLine();
+	
+	
+	// if last legend was multiline
+	for (let i = 0; i < legendHeight; i++) {
+		cursor.up().horizontalAbsolute(0).eraseLine();
+	}
+	
 	cursor.reset().write(" " + timeStr + " ");
 	
 	//print bar graph
@@ -155,17 +159,28 @@ function printGraph (activityUnsorted) {
 	
 	
 	cursor.reset().write("\n");
+	
 	//print legend
-	for (let i = 0; i < activity.length; i++) {
-		let data = activity[i]; // pull ip and amount out of big array
-		
-		setColor(data[0]); // set color by ip
-				
-		cursor.write("  ██ ." + data[0] + " (" + data[1] + ") ");
+	legendHeight = 1;
+	let location = 0;
+	
+	colors.forEach( (color, ip) => {
+		let str = "  ██ ." + ip + " ";
 		
 		//check if gonna need a new line
-	}
-	cursor.reset();
+		if (location + str.length >= termWidth) {
+			cursor.reset().write("\n");
+			location = 0;
+			legendHeight++;
+		}
+		
+		setColor(ip); // set color by ip
+		cursor.write(str);
+		location += str.length;
+		
+	});
+	
+	cursor.reset().write("\n");
 	
 }
 
@@ -178,14 +193,14 @@ function timeAMPM (date) {
 	hours = hours % 12;
 	hours = hours ? hours : 12; // the hour '0' should be '12'
 	
-	// turn them into strings
-	hours = "" + hours;
-	minutes = "" + minutes;
+	//to string
+	hours = hours.toString();
+	minutes = minutes.toString();
 	
-	//pad out to 2 digits
-	hours.padStart(2, "0");
-	minutes.padStart(2, "0");
-	
+	//pad strings
+	hours.padStart(2);
+	minutes.padStart(2, '0');
+		
 	//form time from components
 	return hours + ':' + minutes + ampm;
 }
@@ -195,33 +210,32 @@ function timeAMPM (date) {
 function setColor (ip) {
 	
 	let origin = Number(ip.charAt(0));
-	let device = Number(ip.slice(1));
 	
 	//~ console.log("device #: " + device);
 	
 	switch (origin) {
 		case 0:
 			
-			if (!greys.has(device)) {
-				greys.set(device, availGreys.pop() || '#00ff00');
+			if (!colors.has(ip)) {
+				colors.set(ip, availGreys.pop() || '#00ff00');
 			}
-			cursor.hex(greys.get(device));
+			cursor.hex(greys.get(ip));
 			
 			break;
 		case 1:
 			
-			if (!blues.has(device)) {
-				blues.set(device, availBlues.pop() || '#00ff00');
+			if (!colors.has(ip)) {
+				colors.set(ip, availBlues.pop() || '#00ff00');
 			}
-			cursor.hex(blues.get(device));
+			cursor.hex(colors.get(ip));
 			
 			break;
 		case 2:
 			
-			if (!reds.has(device)) {
-				reds.set(device, availReds.pop() || '#00ff00');
+			if (!colors.has(ip)) {
+				colors.set(ip, availReds.pop() || '#00ff00');
 			}
-			cursor.hex(reds.get(device));
+			cursor.hex(colors.get(ip));
 			
 			break;
 		default:
