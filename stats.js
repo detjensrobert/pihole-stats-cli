@@ -164,6 +164,11 @@ function printGraph (activityUnsorted) {
 	legendHeight = 1;
 	let location = 0;
 	
+	colors = new Map(Array.from(activityUnsorted).sort((a, b) => {
+		// a[0], b[0] is the key of the map
+		return a[0] - b[0];
+	}));
+	
 	colors.forEach( (color, ip) => {
 		let str = "  ██ ." + ip + " ";
 		
